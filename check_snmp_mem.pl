@@ -462,9 +462,7 @@ if (defined ($o_hp)) {
 if (defined ($o_netsnmp)) {
 
   # Get NetSNMP memory values
-  $resultat = (Net::SNMP->VERSION < 4) ?
-		$session->get_request(@nets_oids)
-		:$session->get_request(-varbindlist => \@nets_oids);
+  $resultat = $session->get_request(-varbindlist => \@nets_oids);
   
   if (!defined($resultat)) {
     printf("ERROR: netsnmp : %s.\n", $session->error);
