@@ -1,11 +1,11 @@
 #!/usr/bin/perl -w 
 ############################## check_snmp_mem ##############
-# Version : 1.1
-# Date : Jul 09 2006
+# Version : 1.2
+# Date : Sep 07 2018
 # Author  : Patrick Proy (nagios at proy.org)
 # Help : http://www.manubulon.com/nagios/
 # Licence : GPL - http://www.fsf.org/licenses/gpl.txt
-# Contrib : Jan Jungmann
+# Contrib : Jan Jungmann, Fredric Johansson
 # TODO : 
 #################################################################
 #
