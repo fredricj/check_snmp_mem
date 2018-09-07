@@ -326,9 +326,7 @@ my $resultat=undef;
 if (defined ($o_cisco)) {
 
   # Get Cisco memory table
-  $resultat = (Net::SNMP->VERSION < 4) ?
-                 $session->get_table($cisco_mem_pool)
-                 :$session->get_table(Baseoid => $cisco_mem_pool);
+  $resultat = $session->get_table(Baseoid => $cisco_mem_pool);
   
   if (!defined($resultat)) {
     printf("ERROR: Description table : %s.\n", $session->error);
@@ -403,9 +401,7 @@ if (defined ($o_cisco)) {
 if (defined ($o_hp)) {
 
   # Get hp memory table
-  $resultat = (Net::SNMP->VERSION < 4) ?
-                 $session->get_table($hp_mem_pool)
-                 :$session->get_table(Baseoid => $hp_mem_pool);
+  $resultat = $session->get_table(Baseoid => $hp_mem_pool);
   
   if (!defined($resultat)) {
     printf("ERROR: Description table : %s.\n", $session->error);
