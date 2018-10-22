@@ -15,9 +15,11 @@
 use strict;
 use Net::SNMP;
 use Getopt::Long;
+use Monitoring::Plugin;
 
+my $Name = 'check_snmp_mem';
 my $Version='1.2';
-
+my $np;
 # Nagios specific
 
 #use lib "/usr/local/nagios/libexec";
@@ -65,9 +67,7 @@ my $o_host = 	undef; 		# hostname
 my $o_community = undef; 	# community
 my $o_port = 	161; 		# port
 my $o_domain=	"udp";		# use tcp or udp, ipv4 or ipv6
-my $o_help=	undef; 		# wan't some help ?
 my $o_verb=	undef;		# verbose mode
-my $o_version=	undef;		# print version
 my $o_netsnmp=	1;		# Check with netsnmp (default)
 my $o_cisco=	undef;		# Check cisco router mem
 my $o_hp=	undef;		# Check hp procurve mem
@@ -90,11 +90,10 @@ my $o_privproto='des';		# Priv protocol
 my $o_privpass= undef;		# priv password
 
 # functions
-
-sub p_version { print "check_snmp_mem version : $Version\n"; }
+my $usage = "Usage: $Name [-v] -H <host> -C <snmp_community> [-2] | (-l login -x passwd [-X pass -L <authp>,<privp>])  [-p <port>] -w <warn level> -c <crit level> [-I|-N|-E] [-f] [-m] [-t <timeout>] [-V]\n";
 
 sub print_usage {
-    print "Usage: $0 [-v] -H <host> -C <snmp_community> [-2] | (-l login -x passwd [-X pass -L <authp>,<privp>])  [-p <port>] -w <warn level> -c <crit level> [-I|-N|-E] [-f] [-m] [-t <timeout>] [-V]\n";
+    print $usage;
 }
 
 sub isnnum { # Return true if arg is not a number
@@ -112,55 +111,13 @@ sub help {
    print "(c)2004-2006 to my cat Ratoune - Author: Patrick Proy\n\n";
    print_usage();
    print <<EOT;
--v, --verbose
-   print extra debugging information (including interface list on the system)
--h, --help
-   print this help message
--H, --hostname=HOST
-   name or IP address of host to check
--C, --community=COMMUNITY NAME
-   community name for the host's SNMP agent (implies SNMP v1 or v2c with option)
--2, --v2c
-   Use snmp v2c
--l, --login=LOGIN ; -x, --passwd=PASSWD
-   Login and auth password for snmpv3 authentication 
-   If no priv password exists, implies AuthNoPriv 
--X, --privpass=PASSWD
-   Priv password for snmpv3 (AuthPriv protocol)
--L, --protocols=<authproto>,<privproto>
-   <authproto> : Authentication protocol (md5|sha : default md5)
-   <privproto> : Priv protocole (des|aes : default des) 
--P, --port=PORT
-   SNMP port (Default 161)
--D, --domain=DOMAIN
-   Selects the transport protocol: udp or tcp. (tcp|tcp6|udp|udp6 : default udp)
--w, --warn=INTEGER | INT,INT
-   warning level for memory in percent (0 for no checks) 
-     Default (-N switch) : comma separated level for Real Memory and Swap 
-     -I switch : warning level
--c, --crit=INTEGER | INT,INT
-   critical level for memory in percent (0 for no checks)
-     Default (-N switch) : comma separated level for Real Memory and Swap 
-     -I switch : critical level
--N, --netsnmp (default)
-   check linux memory & swap provided by Net SNMP 
--m, --memcache
-   include cached memory in used memory (only with Net-SNMP)
--I, --cisco
-   check cisco memory (sum of all memory pools)
--E, --hp
-   check HP proccurve memory
--f, --perfdata
-   Performance data output
--t, --timeout=INTEGER
-   timeout for SNMP in seconds (Default: 5)
--V, --version
-   prints version number
+
+
 EOT
 }
 
 # For verbose output
-sub verb { my $t=shift; print $t,"\n" if defined($o_verb) ; }
+sub verb { my $t=shift; print $t,"\n" if $o_verb; }
 
 # Get the alarm signal (just in case snmp timout screws up)
 $SIG{'ALRM'} = sub {
@@ -169,33 +126,115 @@ $SIG{'ALRM'} = sub {
 };
 
 sub check_options {
-    Getopt::Long::Configure ("bundling");
-	GetOptions(
-   	'v'	=> \$o_verb,		'verbose'	=> \$o_verb,
-        'h'     => \$o_help,    	'help'        	=> \$o_help,
-        'H:s'   => \$o_host,		'hostname:s'	=> \$o_host,
-        'p:i'   => \$o_port,   		'port:i'	=> \$o_port,
-		'D:s'   => \$o_domain,   		'domain:s'	=> \$o_domain,
-        'C:s'   => \$o_community,	'community:s'	=> \$o_community,
-	'l:s'	=> \$o_login,		'login:s'	=> \$o_login,
-	'x:s'	=> \$o_passwd,		'passwd:s'	=> \$o_passwd,
-	'X:s'	=> \$o_privpass,		'privpass:s'	=> \$o_privpass,
-	'L:s'	=> \$v3protocols,		'protocols:s'	=> \$v3protocols,   
-	't:i'   => \$o_timeout,       	'timeout:i'     => \$o_timeout,
-	'V'	=> \$o_version,		'version'	=> \$o_version,
-	'I'	=> \$o_cisco,		'cisco'		=> \$o_cisco,
-	'N'	=> \$o_netsnmp,		'netsnmp'	=> \$o_netsnmp,
-        'E'	=> \$o_hp,		'hp'		=> \$o_hp,
-        '2'     => \$o_version2,        'v2c'           => \$o_version2,
-        'c:s'   => \$o_crit,            'critical:s'    => \$o_crit,
-        'w:s'   => \$o_warn,            'warn:s'        => \$o_warn,
-        'm'   	=> \$o_cache,           'memcache'      => \$o_cache,
-        'f'     => \$o_perf,            'perfdata'      => \$o_perf
+    $np->add_arg(
+        spec => 'hostname|H=s',
+        help => 'name or IP address of host to check',
+        label => 'HOST',
+        required => 1
     );
-    if (defined ($o_help) ) { help(); exit $ERRORS{"UNKNOWN"}};
-    if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"}};
-    if ( ! defined($o_host) ) # check host and filter 
-	{ print "No host defined!\n";print_usage(); exit $ERRORS{"UNKNOWN"}}
+    $np->add_arg(
+        spec => 'port|p=i',
+        help => 'SNMP port (Default %s)',
+        label => 'PORT',
+        default => $o_port
+    );
+    $np->add_arg(
+        spec => 'domain|D=s',
+        help => 'Selects the transport protocol: udp or tcp. (tcp|tcp6|udp|udp6 : default %s)',
+        label => '<tcp|tcp6|udp|udp6>',
+        default => 'udp'
+    );
+    $np->add_arg(
+        spec => 'community|C=s',
+        help => 'community name for the host\'s SNMP agent (implies SNMP v1 or v2c with option)',
+        label => 'COMMUNITY_NAME'
+    );
+    $np->add_arg(
+        spec => 'v2c|2',
+        help => 'Use snmp v2c'
+    );
+    $np->add_arg(
+        spec => 'login|l=s',
+        help => 'Login password for snmpv3 authentication '
+    );
+    $np->add_arg(
+        spec => 'passwd|x=s',
+        help => 'Auth password for snmpv3 authentication '
+    );
+    $np->add_arg(
+        spec => 'privpass|X=s',
+        help => 'Priv password for snmpv3 (AuthPriv protocol)'
+    );
+    $np->add_arg(
+        spec => 'protocols|L=s',
+        help => '<authproto> : Authentication protocol (md5|sha : default md5)
+   <privproto> : Priv protocole (des|aes : default des)',
+        label => '<authproto>,<privproto>'
+    );
+    
+    
+    $np->add_arg(
+        spec => 'netsnmp|N',
+        help => 'check linux memory & swap provided by Net SNMP (default)',
+        default => 1
+    );
+    $np->add_arg(
+        spec => 'memcache|m',
+        help => 'include cached memory in used memory (only with Net-SNMP)'
+    );
+    $np->add_arg(
+        spec => 'cisco|I',
+        help => 'check cisco memory (sum of all memory pools)'
+    );
+    $np->add_arg(
+        spec => 'hp|E',
+        help => 'check HP proccurve memory'
+    );
+    
+    $np->add_arg(
+        spec => 'warn|w=s',
+        help => 'warning level for memory in percent (0 for no checks) 
+   Default (-N switch) : comma separated level for Real Memory and Swap 
+   -I switch : warning level',
+        required => 1
+    );
+    $np->add_arg(
+        spec => 'crit|c=s',
+        help => 'critical level for memory in percent (0 for no checks)
+   Default (-N switch) : comma separated level for Real Memory and Swap 
+   -I switch : critical level',
+        required => 1
+    );
+    $np->add_arg(
+        spec => 'perfdata|f',
+        help => 'Performance data output'
+    );
+    
+    $np->getopts;
+    $o_host = $np->opts->hostname;
+    $o_port = $np->opts->port;
+    $o_domain = $np->opts->domain;
+    
+    $o_timeout = $np->opts->timeout;
+    
+    $o_warn = $np->opts->warn;
+    $o_crit = $np->opts->crit;
+    
+    $o_community = $np->opts->community;
+    $o_login = $np->opts->login;
+    $o_passwd = $np->opts->passwd;
+    $o_version2 = $np->opts->v2c;
+    $o_privpass = $np->opts->privpass;
+    $v3protocols = $np->opts->protocols;
+    
+    $o_verb = $np->opts->verbose;
+    
+    $o_cisco = $np->opts->cisco;
+    $o_netsnmp = $np->opts->netsnmp;
+    $o_hp = $np->opts->hp;
+    $o_cache = $np->opts->memcache;
+    $o_perf = $np->opts->perfdata;
+    
 	if ($o_domain !~ /^(udp|udp6|tcp|tcp6)$/)
 	{ print "Invalid transport domain given!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
     # check snmp information
@@ -248,6 +287,14 @@ sub check_options {
 }
 
 ########## MAIN #######
+
+$np = Monitoring::Plugin->new(
+    version => $Version,
+    shortname => $Name,
+    usage => $usage,
+    license => 'GPLv2',
+    blurb => 'SNMP Memory Monitor for Nagios\n(c)2004-2006 Patrick Proy'
+);
 
 check_options();
 
