@@ -24,7 +24,6 @@ my $np;
 
 #use lib "/usr/local/nagios/libexec";
 #use utils qw(%ERRORS $TIMEOUT);
-my $TIMEOUT = 15;
 my %ERRORS = ('OK' => 0, 'WARNING' => 1, 'CRITICAL' => 2, 'UNKNOWN' => 3, 'DEPENDENT' => 4);
 
 # SNMP Datas
@@ -79,7 +78,7 @@ my $o_critR         = undef;    # critical level for Real memory
 my $o_critS         = undef;    # critical level for swap
 my $o_perf          = undef;    # Performance data option
 my $o_cache         = undef;    # Include cached memory as used memory
-my $o_timeout       = undef;    # Timeout (Default 5)
+my $o_timeout       = undef;    # Timeout
 my $o_version2      = undef;    # use snmp v2c
 # SNMPv3 specific
 my $o_login         = undef;    # Login for snmpv3
@@ -323,14 +322,9 @@ $np = Monitoring::Plugin->new(
 
 check_options();
 
-# Check gobal timeout if snmp screws up
-if (defined($TIMEOUT)) {
-    verb("Alarm at $TIMEOUT");
-    alarm($TIMEOUT);
-} else {
-    verb("no timeout defined : $o_timeout + 10");
-    alarm ($o_timeout+10);
-}
+# Check global timeout if snmp screws up
+verb("Alarm at $o_timeout");
+alarm($o_timeout);
 
 # Connect to host
 my ($session,$error);
