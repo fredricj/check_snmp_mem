@@ -20,11 +20,6 @@ use Monitoring::Plugin;
 my $Name = 'check_snmp_mem';
 my $Version='1.2';
 my $np;
-# Nagios specific
-
-#use lib "/usr/local/nagios/libexec";
-#use utils qw(%ERRORS $TIMEOUT);
-my %ERRORS = ('OK' => 0, 'WARNING' => 1, 'CRITICAL' => 2, 'UNKNOWN' => 3, 'DEPENDENT' => 4);
 
 # SNMP Datas
 
