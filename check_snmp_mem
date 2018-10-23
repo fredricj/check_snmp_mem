@@ -124,10 +124,9 @@ sub verb {
     print $t, "\n" if $o_verb;
 }
 
-# Get the alarm signal (just in case snmp timout screws up)
+# Get the alarm signal (just in case snmp timeout screws up)
 $SIG{'ALRM'} = sub {
-    print ("ERROR: Alarm signal (Nagios time-out)\n");
-    exit $ERRORS{"UNKNOWN"};
+    $np->plugin_exit(UNKNOWN, "Alarm signal (Nagios time-out)");
 };
 
 sub check_options {
@@ -241,26 +240,18 @@ sub check_options {
     $o_perf = $np->opts->perfdata;
     
     if ($o_domain !~ /^(udp|udp6|tcp|tcp6)$/) {
-        print "Invalid transport domain given!\n";
-        print_usage();
-        exit $ERRORS{"UNKNOWN"}
+        $np->plugin_exit(UNKNOWN, "Invalid transport domain given!");
     }
     # check snmp information
     if ( !defined($o_community) && (!defined($o_login) || !defined($o_passwd)) ) {
-        print "Put snmp login info!\n";
-        print_usage();
-        exit $ERRORS{"UNKNOWN"}
+        $np->plugin_exit(UNKNOWN, "Put snmp login info!");
     }
     if ((defined($o_login) || defined($o_passwd)) && (defined($o_community) || defined($o_version2)) ) {
-        print "Can't mix snmp v1,2c,3 protocols!\n";
-        print_usage();
-        exit $ERRORS{"UNKNOWN"}
+        $np->plugin_exit(UNKNOWN, "Can't mix SNMP v1, 2c and 3 protocols!");
     }
     if (defined ($v3protocols)) {
         if (!defined($o_login)) {
-            print "Put snmp V3 login info with protocols!\n";
-            print_usage();
-            exit $ERRORS{"UNKNOWN"}
+            $np->plugin_exit(UNKNOWN, "Put SNMP v3 login info with protocols!");
         }
         my @v3proto = split(/,/, $v3protocols);
         if ((defined ($v3proto[0])) && ($v3proto[0] ne "")) { # Auth protocol
@@ -270,24 +261,18 @@ sub check_options {
             $o_privproto = $v3proto[1];
         }
         if ((defined ($v3proto[1])) && (!defined($o_privpass))) {
-            print "Put snmp V3 priv login info with priv protocols!\n";
-            print_usage();
-            exit $ERRORS{"UNKNOWN"}
+            $np->plugin_exit(UNKNOWN, "Put SNMP v3 priv login info with priv protocols!");
         }
     }
     if (defined($o_timeout) && (isnnum($o_timeout) || ($o_timeout < 2) || ($o_timeout > 60))) {
-        print "Timeout must be >1 and <60 !\n";
-        print_usage();
-        exit $ERRORS{"UNKNOWN"}
+        $np->plugin_exit(UNKNOWN, "Timeout must be >1 and <60 !");
     }
     if (!defined($o_timeout)) {
         $o_timeout=5;
     }
     #Check Warning and crit are present
     if ( ! defined($o_warn) || ! defined($o_crit)) {
-        print "Put warning and critical values!\n";
-        print_usage();
-        exit $ERRORS{"UNKNOWN"}
+        $np->plugin_exit(UNKNOWN, "put warning and critical values!");
     }
     # Get rid of % sign
     $o_warn =~ s/\%//g; 
@@ -296,39 +281,27 @@ sub check_options {
     if (defined($o_cisco) || defined($o_hp) ) {
         $o_netsnmp = undef;
         if (isnnum($o_warn) || isnnum($o_crit)) {
-            print "Numeric value for warning or critical !\n";
-            print_usage();
-            exit $ERRORS{"UNKNOWN"}
+            $np->plugin_exit(UNKNOWN, "Numeric value for warning or critical!");
         }
         if ( ($o_crit != 0) && ($o_warn > $o_crit) ) {
-            print "warning <= critical ! \n";
-            print_usage();
-            exit $ERRORS{"UNKNOWN"}
+            $np->plugin_exit(UNKNOWN, "warning <= critical !");
         }
     }
     if (defined($o_netsnmp)) {
         my @o_warnL = split(/,/, $o_warn);
         my @o_critL = split(/,/, $o_crit);
         if (($#o_warnL != 1) || ($#o_critL != 1)) {
-            print "2 warnings and critical !\n";
-            print_usage();
-            exit $ERRORS{"UNKNOWN"}
+            $np->plugin_exit(UNKNOWN, "2 warnings and critical!");
         }
         for (my $i = 0; $i < 2; $i++) {
             if (isnnum($o_warnL[$i]) || isnnum($o_critL[$i])) {
-                print "Numeric value for warning or critical !\n";
-                print_usage();
-                exit $ERRORS{"UNKNOWN"}
+                $np->plugin_exit(UNKNOWN, "Numeric value for warning or critical!");
             }
             if (($o_critL[$i] != 0) && ($o_warnL[$i] > $o_critL[$i])) {
-                print "warning <= critical ! \n";
-                print_usage();
-                exit $ERRORS{"UNKNOWN"}
+                $np->plugin_exit(UNKNOWN, "warning <= critical !");
             }
             if ($o_critL[$i] > 100) {
-                print "critical percent must be < 100 !\n";
-                print_usage();
-                exit $ERRORS{"UNKNOWN"}
+                $np->plugin_exit(UNKNOWN, "critical percent must be < 100 !");
             }
         }
         $o_warnR = $o_warnL[0];
@@ -415,8 +388,7 @@ if ( defined($o_login) && defined($o_passwd)) {
     }
 }
 if (!defined($session)) {
-    printf("ERROR opening session: %s.\n", $error);
-    exit $ERRORS{"UNKNOWN"};
+    $np->plugin_exit(UNKNOWN, join("", "Opening session: ",$error));
 }
 
 # Global variable
@@ -429,9 +401,9 @@ if (defined ($o_cisco)) {
     $resultat = $session->get_table(Baseoid => $cisco_mem_pool);
     
     if (!defined($resultat)) {
-        printf("ERROR: Description table : %s.\n", $session->error);
+        my $session_error = $session->error;
         $session->close;
-        exit $ERRORS{"UNKNOWN"};
+        $np->plugin_exit(UNKNOWN, join("", "Description table: ", $session_error));
     }
     my (@oid, @index) = (undef, undef);
     my $nindex = 0;
@@ -445,9 +417,8 @@ if (defined ($o_cisco)) {
     
     # Check if at least 1 memory pool exists
     if ($nindex == 0) {
-        printf("ERROR: No memory pools found");
         $session->close;
-        exit $ERRORS{"UNKNOWN"};
+        $np->plugin_exit(UNKNOWN, "No memory pools found");
     }
 
     # Test every memory pool
@@ -474,15 +445,15 @@ if (defined ($o_cisco)) {
     my $total=$used + $free; 
     $prct_free = round($used * 100 / ($total), 0);
     verb("Total used : $used, free: $free, output : $c_output");
-    my $c_status = "OK";
+    my $c_status = OK;
     $c_output .= " : " . $prct_free ."% : ";
     if ($crit_s == 1 ) {
         $c_output .= " > " . $o_crit ;
-        $c_status = "CRITICAL";
+        $c_status = CRITICAL;
     } else {
         if ($warn_s == 1 ) {
             $c_output.= " > " . $o_warn;
-            $c_status = "WARNING";
+            $c_status = WARNING;
         }
     }
     $c_output .= " ; ".$c_status;
@@ -493,8 +464,7 @@ if (defined ($o_cisco)) {
         $c_output .= "0;" . $total;
     }
     $session->close;
-    print "$c_output \n";
-    exit $ERRORS{$c_status};
+    $np->plugin_exit($c_status, $c_output);
 }
 
 ########### HP Procurve memory check ############
@@ -504,9 +474,9 @@ if (defined($o_hp)) {
     $resultat = $session->get_table(Baseoid => $hp_mem_pool);
     
     if (!defined($resultat)) {
-        printf("ERROR: Description table : %s.\n", $session->error);
+        my $session_error = $session->error;
         $session->close;
-        exit $ERRORS{"UNKNOWN"};
+        $np->plugin_exit(UNKNOWN, join("", "Description table: ", $session_error));
     }
     my (@oid, @index) = (undef, undef);
     my $nindex = 0;
@@ -520,9 +490,8 @@ if (defined($o_hp)) {
     
     # Check if at least 1 memory slots exists
     if ($nindex == 0) {
-        printf("ERROR: No memory slots found");
         $session->close;
-        exit $ERRORS{"UNKNOWN"};
+        $np->plugin_exit(UNKNOWN, "No memory slots found");
     }
 
     # Consolidate the datas
@@ -541,18 +510,17 @@ if (defined($o_hp)) {
     my $used = $total - $free; 
     $prct_free = round($used * 100 / ($total), 0);
     verb("Used : $used, Free: $free, Output : $c_output");
-    my $c_status = "OK";
+    my $c_status = OK;
     $c_output .= " : " . $prct_free ."% : ";
     if (($o_crit != 0) && ($o_crit <= $prct_free)) {
         $c_output .= " > " . $o_crit ;
-        $c_status = "CRITICAL";
+        $c_status = CRITICAL;
     } else {
         if (($o_warn != 0) && ($o_warn <= $prct_free)) {
             $c_output.= " > " . $o_warn;
-            $c_status = "WARNING";
+            $c_status = WARNING;
         }
     }
-    $c_output .= " ; ".$c_status;
     if (defined($o_perf)) {
         $c_output .= " | ram_used=" . $used.";";
         $c_output .= ($o_warn == 0) ? ";" : round($o_warn * $total / 100,0).";"; 
@@ -560,8 +528,7 @@ if (defined($o_hp)) {
         $c_output .= "0;" . $total ;
     }
     $session->close;
-    print "$c_output \n";
-    exit $ERRORS{$c_status};
+    $np->plugin_exit($c_status, $c_output);
 }
 
 ########### Net snmp memory check ############
@@ -571,9 +538,9 @@ if (defined ($o_netsnmp)) {
     $resultat = $session->get_request(-varbindlist => \@nets_oids);
     
     if (!defined($resultat)) {
-        printf("ERROR: netsnmp : %s.\n", $session->error);
+        my $session_error = $session->error;
         $session->close;
-        exit $ERRORS{"UNKNOWN"};
+        $np->plugin_exit(UNKNOWN, join("", "netSNMP: ", $session_error));
     }
   
     my ($realused, $swapused) = (undef, undef);
@@ -597,18 +564,17 @@ if (defined ($o_netsnmp)) {
         verb("Ram : $$resultat{$nets_ram_free} ($$resultat{$nets_ram_cache} cached) / $$resultat{$nets_ram_total} : $realused");
     verb("Swap : $$resultat{$nets_swap_free} / $$resultat{$nets_swap_total} : $swapused");
   
-    my $n_status = "OK";
-    my $n_output = "Ram : " . $realused . "%, Swap : " . $swapused . "% :";
+    my $n_status = OK;
+    my $n_output = "Ram : " . $realused . "%, Swap : " . $swapused . "%";
     if ((($o_critR != 0) && ($o_critR <= $realused)) || (($o_critS != 0) && ($o_critS <= $swapused))) {
-        $n_output .= " > " . $o_critR . ", " . $o_critS;
-        $n_status = "CRITICAL";
+        $n_output .= ": > " . $o_critR . ", " . $o_critS;
+        $n_status = CRITICAL;
     } else {
         if ((($o_warnR != 0) && ($o_warnR <= $realused)) || (($o_warnS != 0) && ($o_warnS <= $swapused))) {
-            $n_output.= " > " . $o_warnR . ", " . $o_warnS;
-            $n_status = "WARNING";
+            $n_output.= ": > " . $o_warnR . ", " . $o_warnS;
+            $n_status = WARNING;
         }
-    }
-    $n_output .= " ; ".$n_status; 
+    } 
     if (defined($o_perf)) {
         if (defined($o_cache)) {
             $n_output .= " | ram_used=" . ($$resultat{$nets_ram_total} - $$resultat{$nets_ram_free}).";";
@@ -624,6 +590,5 @@ if (defined ($o_netsnmp)) {
         $n_output .= "0;" . $$resultat{$nets_swap_total};
     }  
     $session->close;
-    print "$n_output \n";
-    exit $ERRORS{$n_status};
+    $np->plugin_exit($n_status, $n_output);
 }
